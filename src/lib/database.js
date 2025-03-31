@@ -48,6 +48,7 @@ INSERT INTO public.strava_users(
         athlete.sex, athlete.premium, athlete.created_at, athlete.updated_at,
         athlete.weight, athlete.profile
     ]);
+    
 }
 
 // CREATE TABLE IF NOT EXISTS oauth_tokens (
@@ -81,14 +82,14 @@ async function getStravaUser(discordId) {
 }
 
 // Function to store user preferences
-async function storePreferences(discordId, hideLink, showMap) {
+async function storePreferences(stravaId, anonymous) {
     const query = `
-        INSERT INTO user_preferences (discord_id, hide_link, show_map)
-        VALUES ($1, $2, $3)
-        ON CONFLICT (discord_id) 
-        DO UPDATE SET hide_link = $2, show_map = $3;
+        INSERT INTO runstats_preferences (strava_id, "anonymous")
+        VALUES ($1, $2)
+        ON CONFLICT (strava_id) 
+        DO UPDATE SET "anonymous" = $2;
     `;
-    await pool.query(query, [discordId, hideLink, showMap]);
+    await pool.query(query, [stravaId, anonymous]);
 }
 
 // Function to get user preferences
@@ -134,6 +135,19 @@ async function deleteActivity(activity_id, owner_id) {
     const query = `DELETE FROM activities WHERE id = $1 AND strava_id = $2;`;
     await pool.query(query, [activity_id, owner_id]);
 }
+
+async function getAccessTokenByProviderID(stravaID) {
+    const query = `SELECT access_token FROM oauth_tokens WHERE user_id = $1;`;
+    const result = await pool.query(query, [stravaID]);
+
+    if (result.rows.length === 0) {
+        throw new Error("Strava user not found in the database");
+    }
+
+    const { access_token } = result.rows[0];
+    return access_token;
+}
+
 
 
 module.exports = {

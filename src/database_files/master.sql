@@ -38,8 +38,7 @@ CREATE TABLE IF NOT EXISTS oauth_tokens (
 
 CREATE TABLE IF NOT EXISTS runstats_preferences (
     strava_id TEXT PRIMARY KEY REFERENCES strava_users(strava_id) ON DELETE CASCADE,
-    show_strava_url BOOLEAN DEFAULT false,
-    show_map_picture BOOLEAN DEFAULT false
+    "anonymous" BOOLEAN DEFAULT true,
 );
 
 CREATE TABLE activities (

@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Success Page</title>
+</head>
+<body>
+    <h1>Welcome, <%= user.discord_name %> aka <%= user.strava_name %> on Strava!</h1>
+    <h1>Success you are connected! Before closing the tab, finish setting up your preferences. 
+        These can be changed later in discord with the /preferences command.</h1>
+        <br>
+
+        <h2>Do you want to display location data?</h2>
+        <p>Yes - will show a link to the strava activity</p>
+    <form action="/submit-preferences" method="POST">
+        <label>
+            <input type="radio" name="anonymous" value="yes" required> Yes
+        </label>
+        <label>
+            <input type="radio" name="anonymous" value="no" required> No
+        </label>
+        <br><br>
+        <button type="submit">Submit</button>
+    </form>
+</body>
+</html>

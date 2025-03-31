@@ -1,19 +1,26 @@
 const { Client, Events, GatewayIntentBits, Collection } = require('discord.js');
 const fs = require('fs');
+const path = require('path');
 const express = require('express');
+const cookieParser = require('cookie-parser');
 const axios = require('axios');
 const { handleModalCommand, handleChatCommand, handleButtonCommand } = require('./handlers/handleSlashCommand');
-const { storeStravaUser, storeOauth } = require('./lib/database');
+const { storeStravaUser, storeOauth, storePreferences } = require('./lib/database');
+const { createJWT, authenticateToken } = require('./lib/tokens');
 require('dotenv').config();
 
-const CLIENT_ID = process.env.STRAVA_CLIENTID;
-const CLIENT_SECRET = process.env.STRAVA_CLIENTSECRET;
 // Create a new client instance
 const client = new Client({ intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMembers] });
 const app = express();
 
+
+app.set('view engine', 'ejs');
+app.set('views', path.join(__dirname, 'views'));
+app.use(express.urlencoded({ extended: true }));
+app.use(cookieParser());
+
 client.once(Events.ClientReady, readyClient => {
-	console.log(`Ready! Logged in as ${readyClient.user.tag}`);
+    console.log(`Ready! Logged in as ${readyClient.user.tag}`);
 });
 
 client.commands = new Collection();
@@ -23,7 +30,7 @@ const commandsFolder = fs.readdirSync("./src/commands");
 
 // Log in to Discord with your client's token
 (async () => {
-    for ( file of functions ) {
+    for (file of functions) {
         require(`./functions/${file}`)(client);
     }
     client.handleCommands(commandsFolder, "./src/commands");
@@ -32,15 +39,15 @@ const commandsFolder = fs.readdirSync("./src/commands");
 
 client.on(Events.InteractionCreate, async interaction => {
 
-    if(interaction.isModalSubmit) {
+    if (interaction.isModalSubmit) {
         handleModalCommand(client, interaction);
     }
 
-	if (interaction.isChatInputCommand()) {
+    if (interaction.isChatInputCommand()) {
         handleChatCommand(client, interaction);
     }
 
-    if(interaction.isButton()) {
+    if (interaction.isButton()) {
         handleButtonCommand(client, interaction);
     }
 });
@@ -53,44 +60,48 @@ app.get('/callback', async (req, res) => {
     }
     try {
         // Exchange authorization code for an access token
-        if(process.env.production === "production") {
+        if (process.env.production === "production") {
             response = await axios.post('https://www.strava.com/api/v3/oauth/token', {
-                client_id: CLIENT_ID,
-                client_secret: CLIENT_SECRET,
+                client_id: process.env.STRAVA_CLIENTID,
+                client_secret: process.env.STRAVA_CLIENTSECRET,
                 code: code,
                 grant_type: 'authorization_code'
             });
 
             athlete = response.data.athlete;
-            oauth = { 
-                token_type: response.data.token_type, 
-                expires_at: response.data.expires_at, 
-                expires_in: response.data.expires_in, 
-                refresh_token: response.data.refresh_token, 
-                access_token: response.data.access_token 
+            oauth = {
+                id: athlete.id,
+                token_type: response.data.token_type,
+                expires_at: response.data.expires_at,
+                expires_in: response.data.expires_in,
+                refresh_token: response.data.refresh_token,
+                access_token: response.data.access_token
             }
 
         } else if (process.env.production === "development") {
             const data = require('./test/callback_data');
             athlete = data.athlete;
-            oauth = { 
+            oauth = {
                 id: athlete.id,
-                token_type: data.token_type, 
-                expires_at: data.expires_at, 
-                expires_in: data.expires_in, 
-                refresh_token: data.refresh_token, 
-                access_token: data.access_token 
+                token_type: data.token_type,
+                expires_at: data.expires_at,
+                expires_in: data.expires_in,
+                refresh_token: data.refresh_token,
+                access_token: data.access_token
             }
         }
         console.log(`User ${athlete.id} (Discord ID: ${discordId}) authenticated!`);
-        await storeStravaUser(discordId, athlete).then( () => storeOauth('strava', oauth) );
+        await storeStravaUser(discordId, athlete).then(() => storeOauth('strava', oauth));
 
-		const user = await client.users.fetch(discordId);
+        const user = await client.users.fetch(discordId);
         if (user) {
             // figure out way to instead update existing link msg. 
-            await user.send({
-                content: 'Strava account linked! Use /settings to set your privacy settings',
+            const token = await createJWT({
+                discord_name: user.displayName,
+                strava_name: `${athlete.firstname} ${athlete.lastname}`,
+                id: athlete.id
             });
+            res.cookie('token', token, { httpOnly: true, secure: false }); // Set `secure: true` if using HTTPS
             res.redirect('/success');
         } else {
             res.redirect('/failure');
@@ -101,8 +112,14 @@ app.get('/callback', async (req, res) => {
     }
 });
 
-app.get('/success', (req, res) => {
-    res.send('Authentication successful! Your Strava account is now linked. You may close this window');
+app.get('/success', authenticateToken, (req, res) => {
+    res.render('success', { user: req.user });
+});
+
+app.post('/submit-preferences', authenticateToken, (req, res) => {
+    const anonymousChoice = req.body.anonymous === "Yes";
+    storePreferences(req.user.id, anonymousChoice);
+    res.send(`Your preferences have been saved. You can close this tab.`);
 });
 
 app.get('/failure', (req, res) => {
@@ -120,7 +137,36 @@ app.get('/failure', (req, res) => {
 //         "title": "Messy"
 //     }
 // }
-app.get('/strava/event', (req, res) => {
+app.post('/strava/event', (req, res) => {
+    try {
+        const { aspect_type, object_id, object_type, owner_id } = req.body;
+        // Validate required fields
+        if (!object_type || !object_id || !owner_id) {
+            console.log("no data present");
+        }
+
+        switch (object_type) {
+            case "create":
+                console.log(`Received a ${object_type} event for ${owner_id}`);
+                break;
+            case "create":
+                console.log(`Received a ${object_type} event for ${owner_id}`);
+                break;
+            case "update":
+                console.log(`Received a ${object_type} event for ${owner_id}`);
+                break;
+            case "delete":
+                console.log(`Received a ${object_type} event for ${owner_id}`);
+                break;
+            default:
+                console.log(`Received a malformed event`);
+                break;
+        }
+
+    } catch (error) {
+        console.log(error);
+
+    }
     res.status(200).send('EVENT RECEIVED');
     // parse event to store in db.
     // check if owner id exists in db, if not ask user to reauthenticate
