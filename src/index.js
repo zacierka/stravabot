@@ -47,44 +47,54 @@ client.on(Events.InteractionCreate, async interaction => {
 
 app.get('/callback', async (req, res) => {
     const { code, discordId } = req.query;
-
+    var response, athlete, oauth;
     if (!code || !discordId) {
         return res.status(400).send('Authorization failed.');
     }
-
     try {
         // Exchange authorization code for an access token
-        const response = await axios.post('https://www.strava.com/api/v3/oauth/token', {
-            client_id: CLIENT_ID,
-            client_secret: CLIENT_SECRET,
-            code: code,
-            grant_type: 'authorization_code'
-        });
+        if(process.env.production === "production") {
+            response = await axios.post('https://www.strava.com/api/v3/oauth/token', {
+                client_id: CLIENT_ID,
+                client_secret: CLIENT_SECRET,
+                code: code,
+                grant_type: 'authorization_code'
+            });
 
-        const { athlete } = response.data;
-        const oauth = { 
-            token_type: response.data.token_type, 
-            expires_at: response.data.expires_at, 
-            expires_in: response.data.expires_in, 
-            refresh_token: response.data.refresh_token, 
-            access_token: response.data.access_token 
+            athlete = response.data.athlete;
+            oauth = { 
+                token_type: response.data.token_type, 
+                expires_at: response.data.expires_at, 
+                expires_in: response.data.expires_in, 
+                refresh_token: response.data.refresh_token, 
+                access_token: response.data.access_token 
+            }
+
+        } else if (process.env.production === "development") {
+            const data = require('./test/callback_data');
+            athlete = data.athlete;
+            oauth = { 
+                id: athlete.id,
+                token_type: data.token_type, 
+                expires_at: data.expires_at, 
+                expires_in: data.expires_in, 
+                refresh_token: data.refresh_token, 
+                access_token: data.access_token 
+            }
         }
-
-        // Store user details in your database (Discord ID -> Strava ID mapping)
         console.log(`User ${athlete.id} (Discord ID: ${discordId}) authenticated!`);
-        console.log(JSON.stringify(athlete, null, 2));
-
         await storeStravaUser(discordId, athlete).then( () => storeOauth('strava', oauth) );
 
 		const user = await client.users.fetch(discordId);
         if (user) {
+            // figure out way to instead update existing link msg. 
             await user.send({
                 content: 'Strava account linked! Use /settings to set your privacy settings',
             });
             res.redirect('/success');
+        } else {
+            res.redirect('/failure');
         }
-
-        res.redirect('/failure');
     } catch (error) {
         console.error('Error exchanging code for token:', error);
         res.status(500).send('Authentication failed.');
@@ -98,6 +108,29 @@ app.get('/success', (req, res) => {
 app.get('/failure', (req, res) => {
     res.send('Authentication failed! Discord ID invalid. Try again. You may close this window');
 });
+
+// {
+//     "aspect_type": "update",
+//     "event_time": 1516126040,
+//     "object_id": 1360128428,
+//     "object_type": "activity",
+//     "owner_id": 134815,
+//     "subscription_id": 120475,
+//     "updates": {
+//         "title": "Messy"
+//     }
+// }
+app.get('/strava/event', (req, res) => {
+    res.status(200).send('EVENT RECEIVED');
+    // parse event to store in db.
+    // check if owner id exists in db, if not ask user to reauthenticate
+    // if aspect type create then storeActivity
+    // if aspect type update then storeActivity (updates)
+    // if aspect type delete then deleteActivity(object_id, owner_id)
+
+    // handle DEAUTHORIZE requests to delete all the user data.
+});
+
 
 app.listen(3000, () => {
     console.log('Server running on port 3000');

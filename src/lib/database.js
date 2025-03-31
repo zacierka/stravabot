@@ -34,12 +34,13 @@ pool.on('connect', () => {
 // );
 async function storeStravaUser(discordId, athlete) {
     const query = `
-        INSERT INTO strava_users (strava_id, discord_id, username, firstname, lastname, bio, \
-         city, 'state', country, sex, premium, created_at, updated_at, 'weight', avatar)
+INSERT INTO public.strava_users(
+	    strava_id, discord_id, username, firstname, lastname, bio, \
+        city, polity, country, sex, premium, created_at, updated_at, weight, avatar)
         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)
         ON CONFLICT (discord_id) 
-        DO UPDATE SET city = $7, 'state' = $8, country = $9, premium = $11, \
-        updated_at = $13, 'weight' = $14, avatar = $15;
+        DO UPDATE SET city = $7, polity = $8, country = $9, premium = $11, \
+        updated_at = $13, "weight" = $14, avatar = $15;
     `;
     await pool.query(query, [
         athlete.id, discordId, athlete.username, athlete.firstname, 
@@ -97,11 +98,51 @@ async function getPreferences(discordId) {
     return result.rows[0];
 }
 
+async function saveActivity(activity) {
+    const query = `
+        INSERT INTO activities (id, strava_id, name, type, distance, moving_time, elapsed_time, total_elevation_gain, 
+            start_date, average_speed, max_speed,average_watts, max_watts, calories, device_name)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
+        ON CONFLICT (id) DO UPDATE SET 
+            name = EXCLUDED.name,
+            type = EXCLUDED.type,
+            distance = EXCLUDED.distance,
+            moving_time = EXCLUDED.moving_time,
+            elapsed_time = EXCLUDED.elapsed_time,
+            total_elevation_gain = EXCLUDED.total_elevation_gain,
+            start_date = EXCLUDED.start_date,
+            average_speed = EXCLUDED.average_speed,
+            max_speed = EXCLUDED.max_speed,
+            average_watts = EXCLUDED.average_watts,
+            max_watts = EXCLUDED.max_watts,
+            calories = EXCLUDED.calories,
+            device_name = EXCLUDED.device_name;
+    `;
+
+    const values = [
+        activity.id, activity.athlete.id, activity.name, activity.type, activity.distance,
+        activity.moving_time, activity.elapsed_time, activity.total_elevation_gain,
+        activity.start_date, activity.average_speed, activity.max_speed,
+        activity.average_watts, activity.max_watts, activity.calories, activity.device_name
+    ];
+
+    await pool.query(query, values);
+}
+
+// Function to delete user activity
+async function deleteActivity(activity_id, owner_id) {
+    const query = `DELETE FROM activities WHERE id = $1 AND strava_id = $2;`;
+    await pool.query(query, [activity_id, owner_id]);
+}
+
+
 module.exports = {
     storeStravaUser,
     storeOauth,
     getStravaUser,
     storePreferences,
     getPreferences,
+    saveActivity,
+    deleteActivity,
     pool
 };
