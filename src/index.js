@@ -2,11 +2,13 @@ const { Client, Events, GatewayIntentBits, Collection } = require('discord.js');
 const fs = require('fs');
 const path = require('path');
 const express = require('express');
+const bodyParser = require('body-parser');
 const cookieParser = require('cookie-parser');
 const axios = require('axios');
 const { handleModalCommand, handleChatCommand, handleButtonCommand } = require('./handlers/handleSlashCommand');
 const { storeStravaUser, storeOauth, storePreferences } = require('./lib/database');
 const { createJWT, authenticateToken } = require('./lib/tokens');
+const { handleDelete, handleCreate, handleUpdate } = require('./lib/stravaParser');
 require('dotenv').config();
 
 // Create a new client instance
@@ -18,7 +20,7 @@ app.set('view engine', 'ejs');
 app.set('views', path.join(__dirname, 'views'));
 app.use(express.urlencoded({ extended: true }));
 app.use(cookieParser());
-
+app.use(bodyParser.json());
 client.once(Events.ClientReady, readyClient => {
     console.log(`Ready! Logged in as ${readyClient.user.tag}`);
 });
@@ -95,7 +97,6 @@ app.get('/callback', async (req, res) => {
 
         const user = await client.users.fetch(discordId);
         if (user) {
-            // figure out way to instead update existing link msg. 
             const token = await createJWT({
                 discord_name: user.displayName,
                 strava_name: `${athlete.firstname} ${athlete.lastname}`,
@@ -137,30 +138,24 @@ app.get('/failure', (req, res) => {
 //         "title": "Messy"
 //     }
 // }
-app.post('/strava/event', (req, res) => {
+app.post('/webhook/strava', (req, res) => {
     try {
-        const { aspect_type, object_id, object_type, owner_id } = req.body;
-        // Validate required fields
-        if (!object_type || !object_id || !owner_id) {
-            console.log("no data present");
-        }
+        const event = req.body;
 
-        switch (object_type) {
-            case "create":
-                console.log(`Received a ${object_type} event for ${owner_id}`);
-                break;
-            case "create":
-                console.log(`Received a ${object_type} event for ${owner_id}`);
-                break;
-            case "update":
-                console.log(`Received a ${object_type} event for ${owner_id}`);
-                break;
-            case "delete":
-                console.log(`Received a ${object_type} event for ${owner_id}`);
-                break;
-            default:
-                console.log(`Received a malformed event`);
-                break;
+        console.log('Strava webhook event received:', event);
+      
+        switch (event.aspect_type) {
+          case 'create':
+            handleCreate(event);
+            break;
+          case 'update':
+            handleUpdate(event);
+            break;
+          case 'delete':
+            handleDelete(event);
+            break;
+          default:
+            console.warn('Unknown aspect_type:', event.aspect_type);
         }
 
     } catch (error) {
@@ -177,6 +172,20 @@ app.post('/strava/event', (req, res) => {
     // handle DEAUTHORIZE requests to delete all the user data.
 });
 
+app.get('/webhook/strava', (req, res) => {
+    const VERIFY_TOKEN = process.env.STRAVA_AUTH_TOKEN; // must match what you use when registering
+
+    const mode = req.query['hub.mode'];
+    const token = req.query['hub.verify_token'];
+    const challenge = req.query['hub.challenge'];
+
+    if (mode === 'subscribe' && token === VERIFY_TOKEN) {
+        console.log('Webhook verified successfully');
+        res.status(200).json({ 'hub.challenge': challenge });
+    } else {
+        res.sendStatus(403);
+    }
+});
 
 app.listen(3000, () => {
     console.log('Server running on port 3000');

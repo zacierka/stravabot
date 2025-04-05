@@ -158,5 +158,6 @@ module.exports = {
     getPreferences,
     saveActivity,
     deleteActivity,
+    getAccessTokenByProviderID,
     pool
 };

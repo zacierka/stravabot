@@ -37,29 +37,10 @@ async function handleChatCommand(client, interaction) {
 async function handleButtonCommand(client, interaction) {
     if (!interaction.isButton()) return;
 
-    if (interaction.customId.startsWith('settings-')) {
-        const modal = new ModalBuilder()
-            .setCustomId('settingsModal')
-            .setTitle('Activity Preferences');
-
-        const hideLinkInput = new TextInputBuilder()
-            .setCustomId('hideLink')
-            .setLabel('Hide Link to Activity? (true/false)')
-            .setStyle(TextInputStyle.Short)
-            .setRequired(true);
-
-        const showMapInput = new TextInputBuilder()
-            .setCustomId('showMap')
-            .setLabel('Show Map? (true/false)')
-            .setStyle(TextInputStyle.Short)
-            .setRequired(true);
-
-        modal.addComponents(
-            new ActionRowBuilder().addComponents(hideLinkInput),
-            new ActionRowBuilder().addComponents(showMapInput)
-        );
-
-        await interaction.showModal(modal);
+    if (interaction.customId.startsWith('strava-authorization-btn')) {
+        // When a user presses the authorize button
+        console.log(`${interaction.user.id} started authentication`);
+        
     }
 }
 
