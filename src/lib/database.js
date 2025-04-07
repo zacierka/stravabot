@@ -1,7 +1,5 @@
 const { Pool } = require('pg');
-require('dotenv').config();
 
-// Create a connection pool
 const pool = new Pool({
     user: process.env.PG_USER,
     host: process.env.PG_HOST,
@@ -10,31 +8,13 @@ const pool = new Pool({
     port: process.env.PG_PORT || 5432,
 });
 
-pool.on('connect', () => {
-    console.log('Connected to the PostgreSQL database');
-});
+// =-==-==-==-= Create Methods =-==-==-==-==-=
 
-// Function to store user authentication data
-// CREATE TABLE IF NOT EXISTS strava_users (
-//     strava_id TEXT PRIMARY KEY,
-//     discord_id TEXT UNIQUE NOT NULL,
-//     username TEXT NOT NULL,
-//     firstname TEXT NOT NULL,
-//     lastname TEXT,
-//     bio TEXT,
-//     city TEXT,
-//     `state` TEXT,
-//     country TEXT,
-//     sex SEX,
-//     premium BOOLEAN,
-//     created_at TIMESTAMP,
-//     updated_at TIMESTAMP,
-//     `weight` REAL,
-//     avatar TEXT
-// );
+// Stores an authenticated user
+// * polity aka state
 async function storeStravaUser(discordId, athlete) {
     const query = `
-INSERT INTO public.strava_users(
+        INSERT INTO public.strava_users(
 	    strava_id, discord_id, username, firstname, lastname, bio, \
         city, polity, country, sex, premium, created_at, updated_at, weight, avatar)
         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)
@@ -43,23 +23,15 @@ INSERT INTO public.strava_users(
         updated_at = $13, "weight" = $14, avatar = $15;
     `;
     await pool.query(query, [
-        athlete.id, discordId, athlete.username, athlete.firstname, 
+        athlete.id, discordId, athlete.username, athlete.firstname,
         athlete.lastname, athlete.bio, athlete.city, athlete.state, athlete.country,
         athlete.sex, athlete.premium, athlete.created_at, athlete.updated_at,
         athlete.weight, athlete.profile
     ]);
-    
+
 }
 
-// CREATE TABLE IF NOT EXISTS oauth_tokens (
-//     user_id TEXT PRIMARY KEY,
-//     provider TEXT,
-//     token_type TEXT, 
-//     access_token TEXT,
-//     refresh_token TEXT, 
-//     expires_in INT,
-//     expires_at INT
-// );
+// Stores oauth data for a strava_user
 async function storeOauth(provider, oauth) {
     const query = `
         INSERT INTO oauth_tokens (user_id, provider, token_type, access_token, refresh_token, expires_in, expires_at)
@@ -73,15 +45,7 @@ async function storeOauth(provider, oauth) {
     ]);
 }
 
-
-// Function to retrieve a user by Discord ID
-async function getStravaUser(discordId) {
-    const query = `SELECT * FROM strava_users WHERE discord_id = $1;`;
-    const result = await pool.query(query, [discordId]);
-    return result.rows[0];
-}
-
-// Function to store user preferences
+// Stores an authenticated strava_users preferences
 async function storePreferences(stravaId, anonymous) {
     const query = `
         INSERT INTO runstats_preferences (strava_id, "anonymous")
@@ -90,13 +54,6 @@ async function storePreferences(stravaId, anonymous) {
         DO UPDATE SET "anonymous" = $2;
     `;
     await pool.query(query, [stravaId, anonymous]);
-}
-
-// Function to get user preferences
-async function getPreferences(discordId) {
-    const query = `SELECT * FROM user_preferences WHERE discord_id = $1;`;
-    const result = await pool.query(query, [discordId]);
-    return result.rows[0];
 }
 
 async function saveActivity(activity) {
@@ -130,10 +87,21 @@ async function saveActivity(activity) {
     await pool.query(query, values);
 }
 
-// Function to delete user activity
-async function deleteActivity(activity_id, owner_id) {
-    const query = `DELETE FROM activities WHERE id = $1 AND strava_id = $2;`;
-    await pool.query(query, [activity_id, owner_id]);
+// =-==-==-==-= Read Methods =-==-==-==-==-=
+
+// Retrieve a strava_user from discordID
+async function getStravaUser(discordId) {
+    const query = `SELECT * FROM strava_users WHERE discord_id = $1;`;
+    const result = await pool.query(query, [discordId]);
+    return result.rows[0];
+}
+
+
+// Retrieve user_preferences using a discordID
+async function getPreferences(discordId) {
+    const query = `SELECT * FROM user_preferences WHERE discord_id = $1;`;
+    const result = await pool.query(query, [discordId]);
+    return result.rows[0];
 }
 
 async function getAccessTokenByProviderID(stravaID) {
@@ -148,7 +116,21 @@ async function getAccessTokenByProviderID(stravaID) {
     return access_token;
 }
 
+// =-==-==-==-= Update Methods =-==-==-==-==-=
+// saveActivity => UPSERT
 
+// =-==-==-==-= Delete Methods =-==-==-==-==-=
+
+// Deletes an activity for a strava_user
+async function deleteActivity(activity_id, owner_id) {
+    const query = `DELETE FROM public.activities WHERE id = $1 AND strava_id = $2;`;
+    await pool.query(query, [activity_id, owner_id]);
+}
+
+async function deleteAllActivitiesByProviderID(owner_id) {
+    const query = `DELETE FROM public.activities strava_id = $1;`;
+    await pool.query(query, [owner_id]);
+}
 
 module.exports = {
     storeStravaUser,

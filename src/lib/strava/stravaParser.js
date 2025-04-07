@@ -1,4 +1,4 @@
-const { getAccessTokenByProviderID, saveActivity } = require('./database');
+const { getAccessTokenByProviderID, saveActivity } = require('../database');
 const axios = require('axios');
 
 async function handleCreate(event) {
@@ -35,9 +35,6 @@ async function handleCreate(event) {
             console.error('Strava API Error:', error.response.data);
         }
     }
-
-
-
 }
 
 function handleUpdate(event) {

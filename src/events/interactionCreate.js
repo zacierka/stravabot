@@ -1,4 +1,24 @@
-const { MessageFlags } = require('discord.js');
+const { Events, MessageFlags } = require('discord.js');
+
+module.exports = {
+    name: Events.InteractionCreate,
+    async execute(client) {
+        if (interaction.isModalSubmit) {
+            handleModalCommand(client, interaction);
+        }
+    
+        if (interaction.isChatInputCommand()) {
+            handleChatCommand(client, interaction);
+        }
+    
+        if (interaction.isButton()) {
+            handleButtonCommand(client, interaction);
+        }
+    }
+}
+
+// ================ FUNCTIONS ================
+
 async function handleModalCommand(client, interaction) {
     if (!interaction.isModalSubmit()) return;
 
@@ -43,5 +63,3 @@ async function handleButtonCommand(client, interaction) {
         
     }
 }
-
-module.exports = { handleModalCommand, handleChatCommand, handleButtonCommand }

@@ -1,6 +1,5 @@
 
 const jwt = require("jsonwebtoken");
-const { pool } = require("./database");
 
 async function createJWT(user) {
     let token;
@@ -37,10 +36,6 @@ function authenticateToken(req, res, next) {
         req.user = user; // Attach decoded user info to request
         next();
     });
-}
-
-function refreshAccessToken(athlete_id) {
-    pool.query
 }
 
 module.exports = { 

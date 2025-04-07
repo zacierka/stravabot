@@ -1,71 +1,47 @@
-const { Client, Events, GatewayIntentBits, Collection } = require('discord.js');
-const fs = require('fs');
+// Discord Imports
+const { Client, GatewayIntentBits, Collection } = require('discord.js');
+const registerBot = require('./lib/bot/clientHandler');
 const path = require('path');
+
+// Express Imports
 const express = require('express');
 const bodyParser = require('body-parser');
 const cookieParser = require('cookie-parser');
-const axios = require('axios');
-const { handleModalCommand, handleChatCommand, handleButtonCommand } = require('./handlers/handleSlashCommand');
-const { storeStravaUser, storeOauth, storePreferences } = require('./lib/database');
+const axios = require('axios'); // @TODO move axios alls to file
 const { createJWT, authenticateToken } = require('./lib/tokens');
-const { handleDelete, handleCreate, handleUpdate } = require('./lib/stravaParser');
+const { handleDelete, handleCreate, handleUpdate } = require('./lib/strava/stravaParser');
+
+// Database Imports
+const { storeStravaUser, storeOauth, storePreferences } = require('./lib/database');
+
 require('dotenv').config();
 
-// Create a new client instance
+// Create Discord client
 const client = new Client({ intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMembers] });
+client.commands = new Collection();
+registerBot(client);
+
+// Set Middleware and view engine
 const app = express();
-
-
 app.set('view engine', 'ejs');
 app.set('views', path.join(__dirname, 'views'));
 app.use(express.urlencoded({ extended: true }));
 app.use(cookieParser());
 app.use(bodyParser.json());
-client.once(Events.ClientReady, readyClient => {
-    console.log(`Ready! Logged in as ${readyClient.user.tag}`);
-});
 
-client.commands = new Collection();
-
-const functions = fs.readdirSync("./src/functions").filter(file => file.endsWith(".js"));
-const commandsFolder = fs.readdirSync("./src/commands");
-
-// Log in to Discord with your client's token
-(async () => {
-    for (file of functions) {
-        require(`./functions/${file}`)(client);
-    }
-    client.handleCommands(commandsFolder, "./src/commands");
-    client.login(process.env.BOT_TOKEN);
-})();
-
-client.on(Events.InteractionCreate, async interaction => {
-
-    if (interaction.isModalSubmit) {
-        handleModalCommand(client, interaction);
-    }
-
-    if (interaction.isChatInputCommand()) {
-        handleChatCommand(client, interaction);
-    }
-
-    if (interaction.isButton()) {
-        handleButtonCommand(client, interaction);
-    }
-});
 
 app.get('/callback', async (req, res) => {
     const { code, discordId } = req.query;
-    var response, athlete, oauth;
     if (!code || !discordId) {
         return res.status(400).send('Authorization failed.');
     }
+
+    var response, athlete, oauth;
     try {
-        // Exchange authorization code for an access token
         if (process.env.production === "production") {
             response = await axios.post('https://www.strava.com/api/v3/oauth/token', {
-                client_id: process.env.STRAVA_CLIENTID,
-                client_secret: process.env.STRAVA_CLIENTSECRET,
+                client_id: process.env.STRAVA_CLIENT_ID,
+                client_secret: process.env.STRAVA_CLIENT_SECRET,
                 code: code,
                 grant_type: 'authorization_code'
             });
@@ -127,17 +103,6 @@ app.get('/failure', (req, res) => {
     res.send('Authentication failed! Discord ID invalid. Try again. You may close this window');
 });
 
-// {
-//     "aspect_type": "update",
-//     "event_time": 1516126040,
-//     "object_id": 1360128428,
-//     "object_type": "activity",
-//     "owner_id": 134815,
-//     "subscription_id": 120475,
-//     "updates": {
-//         "title": "Messy"
-//     }
-// }
 app.post('/webhook/strava', (req, res) => {
     try {
         const event = req.body;
@@ -163,17 +128,12 @@ app.post('/webhook/strava', (req, res) => {
 
     }
     res.status(200).send('EVENT RECEIVED');
-    // parse event to store in db.
-    // check if owner id exists in db, if not ask user to reauthenticate
-    // if aspect type create then storeActivity
-    // if aspect type update then storeActivity (updates)
-    // if aspect type delete then deleteActivity(object_id, owner_id)
 
     // handle DEAUTHORIZE requests to delete all the user data.
 });
 
 app.get('/webhook/strava', (req, res) => {
-    const VERIFY_TOKEN = process.env.STRAVA_AUTH_TOKEN; // must match what you use when registering
+    const VERIFY_TOKEN = process.env.STRAVA_VERIFY_TOKEN; // must match what you use when registering
 
     const mode = req.query['hub.mode'];
     const token = req.query['hub.verify_token'];

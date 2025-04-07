@@ -24,7 +24,7 @@ module.exports = {
     async execute(interaction) {
         if (interaction.options.getSubcommand() === 'link') {
             const authorId = interaction.user.id;
-            const clientId = process.env.STRAVA_CLIENTID;
+            const clientId = process.env.STRAVA_CLIENT_ID;
             const redirectUri = encodeURIComponent(`${REDIRECT_URI}/callback?discordId=${authorId}`);
             const scope = 'activity:read'; // Adjust scope based on your needs.... FIX: no scope passed in here.
             const authUrl = `https://www.strava.com/oauth/authorize?client_id=${clientId}&response_type=code&redirect_uri=${redirectUri}&state=${authorId}&scope=${scope}&approval_prompt=force`;
