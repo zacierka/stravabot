@@ -5,6 +5,7 @@ const path = require('path');
 
 // Express Imports
 const express = require('express');
+const { exchangeToken } = require('./lib/strava/stravaOAuthFlow');
 const bodyParser = require('body-parser');
 const cookieParser = require('cookie-parser');
 const axios = require('axios'); // @TODO move axios alls to file
@@ -39,12 +40,7 @@ app.get('/callback', async (req, res) => {
     var response, athlete, oauth;
     try {
         if (process.env.production === "production") {
-            response = await axios.post('https://www.strava.com/api/v3/oauth/token', {
-                client_id: process.env.STRAVA_CLIENT_ID,
-                client_secret: process.env.STRAVA_CLIENT_SECRET,
-                code: code,
-                grant_type: 'authorization_code'
-            });
+            response = await exchangeToken(code);
 
             athlete = response.data.athlete;
             oauth = {
@@ -111,13 +107,13 @@ app.post('/webhook/strava', (req, res) => {
       
         switch (event.aspect_type) {
           case 'create':
-            handleCreate(event);
+            handleCreate(client, event);
             break;
           case 'update':
-            handleUpdate(event);
+            handleUpdate(client, event);
             break;
           case 'delete':
-            handleDelete(event);
+            handleDelete(client, event);
             break;
           default:
             console.warn('Unknown aspect_type:', event.aspect_type);
